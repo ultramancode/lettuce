@@ -30,6 +30,7 @@ import io.lettuce.test.MutableClock;
  * Unit tests for grace period functionality in {@link RedisDatabaseImpl}.
  *
  * @author Ali Takavci
+ * @author Taewoong Kim
  * @since 7.4
  */
 @ExtendWith(MockitoExtension.class)
@@ -151,6 +152,20 @@ class RedisDatabaseImplGracePeriodUnitTests {
         }
 
         @Test
+        @DisplayName("Should reset circuit breaker to CLOSED when grace period is zero")
+        void shouldResetCircuitBreakerWhenGracePeriodIsZero() {
+            // Given: Circuit breaker is OPEN
+            circuitBreaker.transitionTo(CircuitBreaker.State.OPEN);
+
+            // When: Start grace period with 0ms
+            database.startGracePeriod(Duration.ZERO);
+
+            // Then: Database should not be in grace period and circuit breaker should be CLOSED
+            assertThat(database.isInGracePeriod()).isFalse();
+            assertThat(circuitBreaker.getCurrentState()).isEqualTo(CircuitBreaker.State.CLOSED);
+        }
+
+        @Test
         @DisplayName("Should not reset circuit breaker if grace period is still active")
         void shouldNotResetCircuitBreakerDuringGracePeriod() {
             // Given: Circuit breaker is OPEN
@@ -210,6 +225,18 @@ class RedisDatabaseImplGracePeriodUnitTests {
             clock.tick(Duration.ofMillis(150));
 
             // Then: Database should be healthy
+            assertThat(database.isHealthy()).isTrue();
+        }
+
+        @Test
+        @DisplayName("isHealthy() should return true after circuit breaker opened with zero grace period")
+        void shouldBeHealthyAfterCircuitBreakerOpenedWithZeroGracePeriod() {
+            // Given: Circuit breaker opened and grace period is disabled
+            when(healthCheck.getStatus()).thenReturn(HealthStatus.HEALTHY);
+            circuitBreaker.transitionTo(CircuitBreaker.State.OPEN);
+            database.startGracePeriod(Duration.ZERO);
+
+            // Then: Database should be healthy again
             assertThat(database.isHealthy()).isTrue();
         }
 

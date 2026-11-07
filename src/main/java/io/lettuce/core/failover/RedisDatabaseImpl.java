@@ -25,6 +25,7 @@ import io.lettuce.core.internal.LettuceAssert;
  * @param <C> Connection type.
  *
  * @author Ali Takavci
+ * @author Taewoong Kim
  * @since 7.4
  */
 class RedisDatabaseImpl<C extends StatefulRedisConnection<?, ?>> implements RedisDatabase, AsyncCloseable {
@@ -154,14 +155,18 @@ class RedisDatabaseImpl<C extends StatefulRedisConnection<?, ?>> implements Redi
     /**
      * Starts a grace period for this database. During the grace period, this database cannot be selected for failover or
      * failback.
+     * <p>
+     * A zero or negative duration ends the grace period immediately, so the circuit breaker is reset to
+     * {@link CircuitBreaker.State#CLOSED} on the next {@link #isInGracePeriod()} check.
      *
      * @param durationMillis the duration of the grace period in milliseconds
      */
     void startGracePeriod(Duration durationMillis) {
-        if (durationMillis.toMillis() > 0) {
-            long endTime = clock.millis() + durationMillis.toMillis();
-            // this is against a possible overflow
-            this.gracePeriodEndTime = endTime < 0 ? Long.MAX_VALUE : endTime;
+        long duration = Math.max(0, durationMillis.toMillis());
+        long endTime = clock.millis() + duration;
+        // this is against a possible overflow
+        this.gracePeriodEndTime = endTime < 0 ? Long.MAX_VALUE : endTime;
+        if (duration > 0) {
             logger.info("Started grace period of {}ms for database {}", durationMillis, getId());
         }
     }
